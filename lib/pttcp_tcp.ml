@@ -152,13 +152,15 @@ type state_t = {
     mutable rx_rcvd_cpt: int32;     (* bytes rx'd since checkpoint *)
     mutable rx_start: float;        (* sink_data(): when first bits rcvd *)
     mutable rx_stop: float;         (* sink_data(): when no bits rcvd *)
-                                                                         
+    
+    (* surge requests per page *)
+    mutable objperpage: float;
     (* state for handling more complex traffic generators *)
     mutable client_id: int;
 }                                                       
 
 let init_channel_state_t sinme sinhim client_id = 
-  {sinme;  sinhim; tx_target=0l; client_id; 
+  {sinme;  sinhim; tx_target=0l; client_id; objperpage=0.0; 
    tx_pkts=0l; tx_sent=0l; tx_sent_cpt=0l; tx_start=0.0; tx_stop=0.0;
    rx_pkts=0l; rx_rcvd=0l; rx_rcvd_cpt=0l; rx_start=0.0; rx_stop=0.0;}
 
@@ -372,7 +374,7 @@ let create_connectors mgr st dhost num_ports base_port conns continuous cb =
           in
           let _ = del_pttcp_state st state in 
             return ()
-      ) ports) <&> (print_pttcp_state_tx st)
+      ) ports) <&> (print_pttcp_state_rx st)
 
 let request_data st state t = 
   let buf =  Cstruct.sub (OS.Io_page.get ()) 0 4 in 
@@ -388,7 +390,6 @@ let simple_client st bytes state dhost dst_port t =
   try_lwt
     let _ = update_tx_target state bytes in 
     lwt _ = request_data st state t in 
-    lwt _ = Channel.close t in
     let _ = if st.verbose then 
       eprintf "%03.6f: Finished with %d after %ld bytes (%ld pkts).\n%fs = %.4f b/s \n%!" 
         (OS.Clock.time ()) state.client_id state.rx_rcvd state.rx_pkts 
@@ -402,26 +403,25 @@ let simple_client st bytes state dhost dst_port t =
 
 let surge_client st interpage objperpage interobj objsize state dhost dst_port t = 
   try_lwt
-    let rec gen_traffic st state t = function
-      | 0. -> 
-          OS.Time.sleep (get_sample interpage)
+    match state.objperpage with
+      | c when (c < 1.0) -> 
+          let _ = state.objperpage <-  (get_sample objperpage) in
+          OS.Time.sleep (get_sample interpage) 
       | c -> 
           lwt _ = OS.Time.sleep (get_sample interobj) in 
-          let _ = update_tx_stat state (Int32.of_float (get_sample objsize)) in
+          let _ = update_tx_target state (Int32.of_float (get_sample objsize)) in
           lwt _ = request_data st state t in
+          let _ = state.objperpage <- state.objperpage -. 1.0 in
           let _ = if (st.verbose) then 
             eprintf "%03.6f: Finished with %d after %ld bytes (%ld pkts). %fs = %.4f b/s \n%!" 
               (OS.Clock.time ()) state.client_id  state.rx_rcvd state.rx_pkts
               (state.rx_stop -. state.rx_start) 
               ((Int32.to_float state.rx_rcvd) /. (state.rx_stop -. state.rx_start) )
           in 
-            gen_traffic st state t (c -. 1.)
-    in
-    lwt _ = gen_traffic st state t (get_sample objperpage) in 
-      return ()
+            return ()
   with exn -> 
-    return (eprintf "%03.6f: simple_client error: %s\n%!" (OS.Clock.time ()) 
-      (Printexc.to_string exn))
+    return (eprintf "%03.6f: surge_client error: %s\n %s\n%!" (OS.Clock.time ()) 
+      (Printexc.to_string exn) (Printexc.get_backtrace ()) ) 
 
 let generate_traffic mgr mode verbose = 
   let st = init_pttcp_state_t mode verbose in 

@@ -10,12 +10,19 @@ let ip =
   )
 
 let main () =
-  Net.Manager.create (fun mgr interface id ->
-    Net.Manager.configure interface (`IPv4 ip) >>
-    generate_traffic mgr 
+  Net.Manager.create 
+    (fun mgr interface id ->
+       let m_time = Constant(1.0) in
+       let m_size = Constant(50000.0) in
+       let m_count = Constant(10.0) in
+         Net.Manager.configure interface (`IPv4 ip) >>
+        generate_traffic mgr 
 (*     (Srv(10, 10000)) true >>  *)
 (*       (Simple_clt(5, 20000l, Net.Nettypes.ipv4_addr_of_tuple (127l,0l,0l,1l),
  *       10, 10000)) true >>   *)
-      (Cts_ctl(5, 20000l, Net.Nettypes.ipv4_addr_of_tuple (127l,0l,0l,1l), 10, 10000)) true >>  
+(*       (Cts_ctl(5, 20000l, Net.Nettypes.ipv4_addr_of_tuple (127l,0l,0l,1l),
+ *       10, 10000)) true >>   *)
+        (Surge_client(5, Net.Nettypes.ipv4_addr_of_tuple (127l,0l,0l,1l), 10, 10000, 
+                      m_time, m_count, m_time, m_size)) true >>  
     return (printf "Pttcp working \n%!")
   )
