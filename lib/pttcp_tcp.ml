@@ -202,7 +202,7 @@ type traffic_model =
 (*   | Simple_tx of num_conn * bytes * dhost * num_ports * base_port *)
   | Simple_tx of int * int32 * ipv4_addr * int * int
 (*   | Svr of num_ports * base_port  *)
-  | Svr of int * int
+  | Srv of int * int
 (*   | Simple_clt of n, bytes, dhost, num_ports, base_port *)
   | Simple_clt of int * int32 * ipv4_addr * int * int
 (*   | Cts_ctl of n, bytes, dhost, num_ports, base_port *)
@@ -222,7 +222,8 @@ let init_pttcp_state_t mode verbose =
 
 let add_pttcp_state st src_port dst_ip dst_port = 
    let client_id = st.max_id in 
-   let state = init_channel_state_t ((ipv4_addr_of_uint32 0l), src_port) 
+   let state = init_channel_state_t 
+                ((Nettypes.ipv4_addr_of_tuple (0l,0l,0l,0l)), src_port) 
                 (dst_ip,dst_port) client_id in
    let _ =st.max_id <- st.max_id + 1 in
    let _ = st.states <- [state] @ st.states in 
@@ -305,15 +306,24 @@ let create_listeners mgr st num_ports base_port cb =
     in
     let ports = port_num_list (base_port + num_ports) in 
       (Lwt_list.iter_p (
-        fun port -> Net.Channel.listen mgr (`TCPv4 ((None, port), (cb port) )) 
+        fun port -> 
+          try_lwt
+            let _ = printf "Openning port %d\n%!" port in
+              Net.Channel.listen mgr (`TCPv4 ((None, port), (cb port) )) 
+        with exn ->
+          return (eprintf "%03.f: create_listeners error : %s\n%!" 
+                    (OS.Clock.time ()) (Printexc.to_string exn))
+
       ) ports) <&> (print_pttcp_state_tx st)
 
 let simple_server st src_port (dst_ip, dst_port) t = 
   let state = add_pttcp_state st src_port dst_ip dst_port in 
   try_lwt
     while_lwt true do 
-      lwt buf = Channel.read_some ~len:4 t in 
-      let tx_len = Cstruct.BE.get_uint32 buf 0 in  
+      lwt buf = Channel.read_some ~len:4 t in
+      let _ = printf "Read %d bytes\n%!" (Cstruct.len buf) in 
+      let tx_len = Cstruct.LE.get_uint32 buf 0 in  
+      let _ = printf "Need to send %ld bytes...\n%!" tx_len in 
       let _ = update_tx_target state tx_len in
       let rec send_data state t = function 
         | 0l -> return ()
@@ -332,7 +342,8 @@ let simple_server st src_port (dst_ip, dst_port) t =
                    (OS.Clock.time ()) state.client_id state.tx_target 
                    state.tx_pkts)
       in 
-        send_data state t tx_len 
+      lwt _ = send_data state t tx_len in
+        return (del_pttcp_state st state)
     done
   with exn ->
     let _ = del_pttcp_state st state in 
@@ -365,7 +376,7 @@ let create_connectors mgr st dhost num_ports base_port conns continuous cb =
 
 let request_data st state t = 
   let buf =  Cstruct.sub (OS.Io_page.get ()) 0 4 in 
-  let _ = Cstruct.BE.set_uint32 buf 0 state.tx_target in 
+  let _ = Cstruct.LE.set_uint32 buf 0 state.tx_target in 
   lwt _  = write_and_flush t buf in 
     while_lwt (state.tx_target > state.rx_rcvd) do
       lwt recv = Channel.read_some t in 
@@ -375,7 +386,7 @@ let request_data st state t =
 
 let simple_client st bytes state dhost dst_port t = 
   try_lwt
-    let _ = update_tx_stat state bytes in 
+    let _ = update_tx_target state bytes in 
     lwt _ = request_data st state t in 
     lwt _ = Channel.close t in
     let _ = if st.verbose then 
@@ -419,7 +430,7 @@ let generate_traffic mgr mode verbose =
           simple_rx st num_ports base_port 
       | Simple_tx(num_conn, bytes, dhost, num_ports, base_port) -> 
           simple_tx st num_conn bytes dhost num_ports base_port *)
-      | Svr (num_ports, base_port ) -> 
+      | Srv (num_ports, base_port ) -> 
           create_listeners mgr st num_ports base_port (simple_server st)
       | Simple_clt(num_conn, bytes, dhost, num_ports, base_port) -> 
           create_connectors mgr st dhost num_ports base_port num_conn

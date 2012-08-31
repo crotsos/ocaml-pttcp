@@ -14,5 +14,5 @@ Library pttcp
 Executable pttcp
   Path:       lib
   BuildTools: ocamlbuild
-  MainIs:     pttcp.ml
+  MainIs:     pttcp_cmd.ml
   

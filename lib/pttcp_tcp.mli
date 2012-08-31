@@ -26,7 +26,7 @@ type model =
 type traffic_model = 
   | Simple_rx of int * int
   | Simple_tx of int * int32 * ipv4_addr * int * int
-  | Svr of int * int
+  | Srv of int * int
   | Simple_clt of int * int32 * ipv4_addr * int * int
   | Cts_ctl of int * int32 * ipv4_addr * int * int
   | Surge_client of int * ipv4_addr * int * int * model * model * model *model 
