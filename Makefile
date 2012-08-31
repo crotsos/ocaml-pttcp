@@ -1,10 +1,23 @@
 .PHONY: all clean distclean setup build doc install test-build test 
-all: build
+all: unix 
+# build
 
 J ?= 2
 NAME=pttcp
 
 -include Makefile.config
+
+unix:
+	cd lib && $(MAKE)
+
+xen:
+	cd lib && $(MAKE) xen
+
+clean:
+	cd lib && $(MAKE) clean
+
+run:
+	sudo ./lib/_build/main.native
 
 clean: setup.data setup.bin
 	./setup.bin -clean $(OFLAGS)

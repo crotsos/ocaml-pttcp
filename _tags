@@ -17,3 +17,7 @@
 "lib/pttcp.cmxs": use_pttcp
 # Executable pttcp
 # OASIS_STOP
+true: annot
+<lib/*>: syntax_camlp4o
+<lib/*>: pkg_lwt.syntax
+<lib/*>: cstruct.syntax
