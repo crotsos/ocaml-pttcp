@@ -7,12 +7,9 @@ License:     GPL-2
 Plugins:     META (0.3)
 
 Library pttcp
-  Path:       lib/
-  BuildTools: ocamlbuild
-  Modules:    Pttcp_tcp
-  
-Executable pttcp
-  Path:       lib
-  BuildTools: ocamlbuild
-  MainIs:     pttcp_cmd.ml
-  
+  Path:           lib/
+  BuildTools:     ocamlbuild
+  Modules:        Pttcp_tcp
+  CompiledObject: native
+  Pack:           true
+  BuildDepends:	  mirage-net, lwt, lwt.syntax

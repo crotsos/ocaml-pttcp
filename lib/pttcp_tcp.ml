@@ -330,12 +330,12 @@ let simple_server st src_port (dst_ip, dst_port) t =
       let rec send_data state t = function 
         | 0l -> return ()
         | len when (len > 1460l) -> 
-            let buf = (Cstruct.sub (OS.Io_page.get ()) 0 1460) in 
+            let buf = (Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0 1460) in 
             lwt _ = write_and_flush t buf in
             let _ = update_tx_stat state 1460l in 
               send_data state t (Int32.sub len 1460l)
         | len ->
-            let buf = Cstruct.sub (OS.Io_page.get ()) 0 (Int32.to_int len) in 
+            let buf = Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0 (Int32.to_int len) in 
             lwt _ = write_and_flush t buf in 
             let _ = update_tx_stat state len in
               return 
@@ -377,7 +377,7 @@ let create_connectors mgr st dhost num_ports base_port conns continuous cb =
       ) ports) <&> (print_pttcp_state_rx st)
 
 let request_data st state t = 
-  let buf =  Cstruct.sub (OS.Io_page.get ()) 0 4 in 
+  let buf =  Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0 4 in 
   let _ = Cstruct.LE.set_uint32 buf 0 state.tx_target in 
   lwt _  = write_and_flush t buf in 
     while_lwt (state.tx_target > state.rx_rcvd) do

@@ -1,2 +1,0 @@
-DEPS="mirage-net mirage"
-SYNTAX_DEPS="lwt.syntax cstruct.syntax"

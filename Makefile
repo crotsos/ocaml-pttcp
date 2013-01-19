@@ -1,5 +1,5 @@
 .PHONY: all clean distclean setup build doc install test-build test 
-all: unix 
+all: build 
 # build
 
 J ?= 2
