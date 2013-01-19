@@ -1,0 +1,12 @@
+# OASIS_START
+# DO NOT EDIT (digest: 5ce7e07af1d40b247913d92c4ebcda3a)
+version = "0.1"
+description = "An ocaml port of the cambridge pttcp traffic generator"
+requires = "mirage-net lwt lwt.syntax"
+archive(byte) = "pttcp.cma"
+archive(byte, plugin) = "pttcp.cma"
+archive(native) = "pttcp.cmxa"
+archive(native, plugin) = "pttcp.cmxs"
+exists_if = "pttcp.cmxa"
+# OASIS_STOP
+
