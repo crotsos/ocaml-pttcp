@@ -323,9 +323,7 @@ let simple_server st src_port (dst_ip, dst_port) t =
   try_lwt
     while_lwt true do 
       lwt buf = Channel.read_some ~len:4 t in
-      let _ = printf "Read %d bytes\n%!" (Cstruct.len buf) in 
       let tx_len = Cstruct.LE.get_uint32 buf 0 in  
-      let _ = printf "Need to send %ld bytes...\n%!" tx_len in 
       let _ = update_tx_target state tx_len in
       let rec send_data state t = function 
         | 0l -> return ()

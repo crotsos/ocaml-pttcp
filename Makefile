@@ -15,7 +15,6 @@ xen:
 
 clean: # setup.data setup.bin
 	./setup.bin -clean $(OFLAGS)
-	cd lib && $(MAKE) clean
 
 run:
 	sudo ./lib/_build/main.native
