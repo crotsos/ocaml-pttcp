@@ -9,7 +9,7 @@ Plugins:     META (0.3)
 Library pttcp
   Path:           lib/
   BuildTools:     ocamlbuild
-  Modules:        Pttcp_tcp
+  Modules:        Pttcp_tcp, Pttcp_udp
   CompiledObject: native
   Pack:           true
   BuildDepends:	  mirage-net, lwt, lwt.syntax
