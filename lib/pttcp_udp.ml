@@ -88,15 +88,15 @@ type connection_model =
 (*  | Simple_rx of num_ports * base_port *)
   | Simple_rx of int * int
 (*   | Simple_tx of num_conn * bytes * dhost * num_ports * base_port *)
-  | Simple_tx of int * int32 * ipv4_addr * int * int
+  | Simple_tx of int * int32 * Ipaddr.V4.t * int * int
 (*   | Svr of num_ports * base_port  *)
   | Srv of int * int
 (*   | Simple_clt of n, bytes, dhost, num_ports, base_port *)
-  | Simple_clt of int * int32 * ipv4_addr * int * int
+  | Simple_clt of int * int32 * Ipaddr.V4.t * int * int
 (*   | Cts_ctl of n, bytes, dhost, num_ports, base_port *)
-  | Cts_ctl of int * int32 * ipv4_addr * int * int
+  | Cts_ctl of int * int32 * Ipaddr.V4.t * int * int
 (*   | Surge_client of n, dhost, num_ports, base_port interpage objperpage interobj objsize *)
-  | Surge_client of int * ipv4_addr * int * int * model * model * model * model 
+  | Surge_client of int * Ipaddr.V4.t * int * int * model * model * model * model 
 
 type flow_model = 
   | TCP
@@ -118,7 +118,7 @@ let add_pttcp_state st src_port dst_ip dst_port =
    let client_id = st.max_id in 
    let state = 
      init_channel_state_t 
-      ((Nettypes.ipv4_addr_of_tuple (0l,0l,0l,0l)), src_port) 
+      ((Ipaddr.V4.make 0l 0l 0l 0l), src_port) 
       (dst_ip,dst_port) client_id in
    let _ =st.max_id <- st.max_id + 1 in
    let _ = st.states <- [state] @ st.states in 
@@ -243,14 +243,14 @@ let simple_server mgr st src_port (dst_ip, dst_port) buf =
       let rec send_data state = function 
         | 0l -> return ()
         | len when (len > size) -> 
-            let buf = (Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0
+            let buf = (Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get 1)) 0
             (Int32.to_int size)) in 
             lwt _ = write_and_flush mgr src_port (dst_ip, dst_port) buf in
             let _ = update_tx_stat state size in
             lwt _ = OS.Time.sleep (get_sample delay) in 
               send_data state (Int32.sub len size)
         | len ->
-            let buf = Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0 (Int32.to_int len) in 
+            let buf = Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get 1)) 0 (Int32.to_int len) in 
             lwt _ = write_and_flush mgr src_port (dst_ip, dst_port) buf in 
             let _ = update_tx_stat state len in
               return 
@@ -294,7 +294,7 @@ let create_connectors mgr st dhost num_ports base_port conns continuous cb =
       ) ports) <&> (print_pttcp_state_rx st)
 
 let marshal_flow_request state flow = 
-  let buf =  Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0 14 in 
+  let buf =  Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get 1)) 0 14 in 
   let _ = Cstruct.LE.set_uint32 buf 0 state.tx_target in 
   let _ = 
     match flow with

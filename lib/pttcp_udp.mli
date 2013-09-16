@@ -24,10 +24,10 @@ type model =
 
 type connection_model = 
   | Simple_rx of int * int
-  | Simple_tx of int * int32 * ipv4_addr * int * int
+  | Simple_tx of int * int32 * Ipaddr.V4.t * int * int
   | Srv of int * int
-  | Simple_clt of int * int32 * ipv4_addr * int * int
-  | Cts_ctl of int * int32 * ipv4_addr * int * int
-  | Surge_client of int * ipv4_addr * int * int * model * model * model *model 
+  | Simple_clt of int * int32 * Ipaddr.V4.t * int * int
+  | Cts_ctl of int * int32 * Ipaddr.V4.t * int * int
+  | Surge_client of int * Ipaddr.V4.t * int * int * model * model * model *model 
 
 val generate_traffic: Net.Manager.t -> connection_model -> model -> int -> bool -> unit Lwt.t
