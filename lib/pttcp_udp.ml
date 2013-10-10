@@ -78,7 +78,7 @@ type model =
 
 let get_sample = function
   | Constant(m) -> m
-  | Exp(m) -> (log (Random.float max_float)) *. m
+  | Exp(m) -> (abs_float (log ( 1.0 -. (Random.float 1.0) ))) /. m
   | Pareto(m, s) -> 
       let v = Random.float max_float in
       let d = v ** (1.0/.s) in 
@@ -135,7 +135,7 @@ let print_pttcp_state_rx st =
     let total_bytes = List.fold_right
       (fun s b ->
         let r = Int32.add s.rx_rcvd_cpt b in
-        let rate = ((Int32.to_float s.rx_rcvd_cpt) *. 8.0) /. 60000.0 in 
+        let rate = ((Int32.to_float s.rx_rcvd_cpt) *. 8.0) /. 1024.0 in 
         let _ = s.rx_rcvd_cpt <- 0l in
         let _ = printf "+%.4fkbps " rate in 
           r) st.states 0l in
@@ -145,14 +145,14 @@ let print_pttcp_state_rx st =
     let finished_bytes = List.fold_right
       (fun s b ->
         let r = Int32.add s.rx_rcvd_cpt b in 
-        let rate = ((Int32.to_float s.rx_rcvd_cpt) *. 8.0) /. 60000.0 in 
+        let rate = ((Int32.to_float s.rx_rcvd_cpt) *. 8.0) /. 1024.0 in 
         let _ = if (st.verbose) then printf "-%.4fkbps " rate in 
           r) st.finished 0l in
     let finished_count = List.length st.finished in 
     let _ = st.finished <- [] in 
-    let rate = ((Int32.to_float (Int32.add total_bytes finished_bytes)) *. 8.0) /. 60000000.0 in 
-    let _ = printf "\n%d streams active, %d made progress, %d finished: tot = %ld, tot Mb/s = %.2f\n%!"
-              active_count progress_count finished_count (Int32.add total_bytes finished_bytes) rate in
+    let rate = ((Int32.to_float (Int32.add total_bytes finished_bytes)) *. 8.0) /. 1048576.0 in 
+    let _ = printf "\n%.02f server: %d streams active, %d made progress, %d finished: tot = %ld, tot Mb/s = %.2f\n%!"
+              (OS.Clock.time ()) active_count progress_count finished_count (Int32.add total_bytes finished_bytes) rate in
       return ()
   done
 
@@ -162,7 +162,7 @@ let print_pttcp_state_tx st =
     let total_bytes = List.fold_right
       (fun s b ->
         let r = Int32.add s.tx_sent_cpt b in
-        let rate = ((Int32.to_float s.tx_sent_cpt) *. 8.0) /. 60000.0 in 
+        let rate = ((Int32.to_float s.tx_sent_cpt) *. 8.0) /. 1024.0 in 
         let _ = s.tx_sent_cpt <- 0l in
         let _ = printf "+%.4fkbps " rate in 
           r) st.states 0l in
@@ -172,14 +172,14 @@ let print_pttcp_state_tx st =
     let finished_bytes = List.fold_right
       (fun s b ->
         let r = Int32.add s.tx_sent_cpt b in 
-        let rate = ((Int32.to_float s.tx_sent_cpt) *. 8.0) /. 60000.0 in 
+        let rate = ((Int32.to_float s.tx_sent_cpt) *. 8.0) /. 1024.0 in 
         let _ = if (st.verbose) then printf "-%.4fkbps " rate in 
           r) st.finished 0l in
     let finished_count = List.length st.finished in 
     let _ = st.finished <- [] in 
-    let rate = ((Int32.to_float (Int32.add total_bytes finished_bytes)) *. 8.0) /. 60000000.0 in 
-    let _ = printf "\n%d streams active, %d made progress, %d finished: tot = %ld, tot Mb/s = %.2f\n%!"
-              active_count progress_count finished_count (Int32.add total_bytes finished_bytes) rate in
+    let rate = ((Int32.to_float (Int32.add total_bytes finished_bytes)) *. 8.0) /. 1048576.0 in 
+    let _ = printf "\n%.02f client: %d streams active, %d made progress, %d finished: tot = %ld, tot Mb/s = %.2f\n%!"
+              (OS.Clock.time ()) active_count progress_count finished_count (Int32.add total_bytes finished_bytes) rate in
       return ()
   done 
 
@@ -201,7 +201,7 @@ let create_listeners mgr st num_ports base_port cb =
       (Lwt_list.iter_p (
         fun port -> 
           try_lwt
-            let _ = printf "Openning port %d\n%!" port in
+            let _ = printf "setting up a listener on port %d...\n%!" port in 
               Net.Datagram.UDPv4.recv mgr (None, port) (cb mgr st port) 
         with exn ->
           return (eprintf "%03.f: create_listeners error : %s\n%!" 
@@ -230,10 +230,8 @@ let unmarshal_flow_request buf =
 let simple_server mgr st src_port (dst_ip, dst_port) buf = 
   let state = add_pttcp_state st src_port dst_ip dst_port in 
   try_lwt
-    while_lwt true do 
-      let _ = printf "Waiting for UDP request\n%!" in 
+      let _ = printf "got a request on port %d\n%!" src_port in 
       let (tx_len, fl) = unmarshal_flow_request buf in 
-      let _ = printf "got a UDP request\n%!" in 
       let (delay, size) = 
         match fl with
         | TCP -> ((Constant(0.0)), 1460l)
@@ -242,26 +240,28 @@ let simple_server mgr st src_port (dst_ip, dst_port) buf =
       let _ = update_tx_target state tx_len in
       let rec send_data state = function 
         | 0l -> return ()
-        | len when (len > size) -> 
+        | len when (len > size) ->
+            let delay = get_sample delay in 
+            lwt _ = OS.Time.sleep delay in 
             let buf = (Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0
             (Int32.to_int size)) in 
             lwt _ = write_and_flush mgr src_port (dst_ip, dst_port) buf in
             let _ = update_tx_stat state size in
-            lwt _ = OS.Time.sleep (get_sample delay) in 
               send_data state (Int32.sub len size)
         | len ->
+            lwt _ = OS.Time.sleep (get_sample delay) in 
             let buf = Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0 (Int32.to_int len) in 
             lwt _ = write_and_flush mgr src_port (dst_ip, dst_port) buf in 
             let _ = update_tx_stat state len in
-              return 
-                (eprintf 
-                   "%03.6f: flow %d - finished %ld bytes (%ld pkts)\n%!"
-                   (OS.Clock.time ()) state.client_id state.tx_target 
-                   state.tx_pkts)
+            let _ = if (st.verbose) then 
+              eprintf "%03.6f: flow %d - finished %ld bytes (%ld pkts)\n%!"
+                   (OS.Clock.time ()) state.client_id state.tx_target state.tx_pkts
+            in
+            let _ = del_pttcp_state st state in 
+              return ()
       in 
-      lwt _ = send_data state tx_len in
-        return (del_pttcp_state st state)
-    done
+      let _ = Lwt.ignore_result (send_data state tx_len) in
+        return ()
   with exn ->
     let _ = del_pttcp_state st state in 
     return (eprintf "%03.f: simple_server error : %s\n%!" 
@@ -286,7 +286,7 @@ let create_connectors mgr st dhost num_ports base_port conns continuous cb =
               let _ = printf "connecting to UDP server\n%!" in
                   
 (*                  Net.Datagram.UDPv4.recv mgr (dhost, port) *)
-                cb state mgr (port + (100*(!count))) dhost port
+                cb state mgr port dhost port
             done 
           in
           let _ = del_pttcp_state st state in 
@@ -313,24 +313,22 @@ let marshal_flow_request state flow =
   in buf 
 
 let request_data state st mgr src_port dst  = 
-  let _ = printf "sending a UDP request\n%!" in 
   let buf = marshal_flow_request state st.flow in 
   lwt _  = write_and_flush mgr src_port dst buf in 
-  let _ = printf "sending a UDP request\n%!" in 
-
   let recv_data state u _ recv =
     let _ = update_rx_stat state (Int32.of_int (Cstruct.len recv)) in
     let _ = 
       try 
         if (state.tx_target <= state.rx_rcvd) then Lwt.wakeup u () 
-      with exn -> ()
+      with exn -> (eprintf "%s\n%!" (Printexc.to_string exn))
     in
       return ()
   in
   let (t, u) = Lwt.task () in 
-  lwt _ = 
-    Net.Datagram.UDPv4.recv mgr (None, src_port) (recv_data state u) <?> t
-  in
+  let th = Net.Datagram.UDPv4.recv mgr (None, src_port) (recv_data state u) in 
+  lwt _ = th <?> t in
+  let _ = printf "thread returned for port %d\n%!" src_port in 
+  let _ = Lwt.cancel th in 
     return ()
 
 let simple_client st bytes state mgr src_port dhost dst_port = 

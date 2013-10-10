@@ -209,7 +209,7 @@ let create_flow mgr st port desc =
   let json = Json.as_object (Json.parse desc) in 
 
   (* export some details *)
-  letreq_id = int_of_float (Json.as_float (get_object_field "req_id" json) ) in  
+  let req_id = int_of_float (Json.as_float (get_object_field "req_id" json) ) in  
   let step_id = int_of_float (Json.as_float (get_object_field "step_id" json) ) in  
 
   let path = List.nth (Json.as_list (get_object_field "path" json)) step_id in

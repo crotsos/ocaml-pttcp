@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 3862229ba1222bae1e9e80b057747f89)
+# DO NOT EDIT (digest: c807452270c45cc0fae8a78e538c0510)
 # Ignore VCS directories, you can use the same kind of rule outside 
 # OASIS_START/STOP if you want to exclude directories that contains 
 # useless stuff for the build process
@@ -17,9 +17,12 @@
 "lib/pttcp.cmxs": use_pttcp
 "lib/pttcp_tcp.cmx": for-pack(Pttcp)
 "lib/pttcp_udp.cmx": for-pack(Pttcp)
+"lib/pttcp_hadoop.cmx": for-pack(Pttcp)
 <lib/*.ml{,i}>: pkg_mirage-net
 <lib/*.ml{,i}>: pkg_lwt
 <lib/*.ml{,i}>: pkg_lwt.syntax
+<lib/*.ml{,i}>: pkg_tiny_json
+<lib/*.ml{,i}>: pkg_re.str
 # OASIS_STOP
 true: annot
 <lib/*>: syntax_camlp4o

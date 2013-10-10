@@ -30,5 +30,8 @@ type traffic_model =
   | Simple_clt of int * int32 * ipv4_addr * int * int
   | Cts_ctl of int * int32 * ipv4_addr * int * int
   | Surge_client of int * ipv4_addr * int * int * model * model * model *model 
+  | Trace_server of int
+  | Trace_client of ipv4_addr list * int * string * string
+
 
 val generate_traffic: Net.Manager.t -> traffic_model -> bool -> unit Lwt.t

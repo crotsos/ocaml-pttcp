@@ -194,9 +194,9 @@ let get_sample = function
   | Constant(m) -> m
   | Exp(m) -> (log (Random.float max_float)) *. m
   | Pareto(m, s) -> 
-      let v = Random.float max_float in
+      let v = 1.0 -. (Random.float 0.999) in
       let d = v ** (1.0/.s) in 
-        m *. ( 1.0 /. d)
+        m  /. d
 
 type traffic_model = 
 (*  | Simple_rx of num_ports * base_port *)
@@ -211,6 +211,10 @@ type traffic_model =
   | Cts_ctl of int * int32 * ipv4_addr * int * int
 (*   | Surge_client of n, dhost, num_ports, base_port interpage objperpage interobj objsize *)
   | Surge_client of int * ipv4_addr * int * int * model * model * model * model 
+(* trace client server_ip, server_port, trace source *)
+  | Trace_server of int
+(* trace client server_ip, server_port, trace source dest_file *)
+  | Trace_client of ipv4_addr list * int * string * string
 
 type pttcp_t = {
   mutable states: state_t list;
@@ -242,9 +246,9 @@ let print_pttcp_state_rx st =
     let total_bytes = List.fold_right
       (fun s b ->
         let r = Int32.add s.rx_rcvd_cpt b in
-        let rate = ((Int32.to_float s.rx_rcvd_cpt) *. 8.0) /. 60000.0 in 
+        let rate = ((Int32.to_float s.rx_rcvd_cpt) *. 8.0) /. 1024.0 in 
         let _ = s.rx_rcvd_cpt <- 0l in
-        let _ = printf "+%.4fkbps " rate in 
+        let _ = if (st.verbose) then printf "+%.4fkbps " rate in 
           r) st.states 0l in
     let progress_count = 
       List.length (List.filter (fun s -> (s.rx_rcvd_cpt > 0l)) st.states) in 
@@ -252,13 +256,15 @@ let print_pttcp_state_rx st =
     let finished_bytes = List.fold_right
       (fun s b ->
         let r = Int32.add s.rx_rcvd_cpt b in 
-        let rate = ((Int32.to_float s.rx_rcvd_cpt) *. 8.0) /. 60000.0 in 
+        let rate = ((Int32.to_float s.rx_rcvd_cpt) *. 8.0) /. 1024.0 in 
         let _ = if (st.verbose) then printf "-%.4fkbps " rate in 
           r) st.finished 0l in
     let finished_count = List.length st.finished in 
     let _ = st.finished <- [] in 
-    let rate = ((Int32.to_float (Int32.add total_bytes finished_bytes)) *. 8.0) /. 60000000.0 in 
-    let _ = printf "\n%d streams active, %d made progress, %d finished: tot = %ld, tot Mb/s = %.2f\n%!"
+    let rate = ((Int32.to_float (Int32.add total_bytes finished_bytes)) *. 8.0)/. 1048576.0 in 
+    let _ = 
+      if (st.verbose) then  
+        printf "\n%d streams active, %d made progress, %d finished: tot = %ld, tot Mb/s = %.2f\n%!"
               active_count progress_count finished_count (Int32.add total_bytes finished_bytes) rate in
       return ()
   done
@@ -269,9 +275,9 @@ let print_pttcp_state_tx st =
     let total_bytes = List.fold_right
       (fun s b ->
         let r = Int32.add s.tx_sent_cpt b in
-        let rate = ((Int32.to_float s.tx_sent_cpt) *. 8.0) /. 60000.0 in 
+        let rate = ((Int32.to_float s.tx_sent_cpt) *. 8.0) /. 1024.0 in 
         let _ = s.tx_sent_cpt <- 0l in
-        let _ = printf "+%.4fkbps " rate in 
+        let _ = if (st.verbose) then printf "+%.4fkbps " rate in 
           r) st.states 0l in
     let progress_count = 
       List.length (List.filter (fun s -> (s.tx_sent_cpt > 0l)) st.states) in 
@@ -279,13 +285,15 @@ let print_pttcp_state_tx st =
     let finished_bytes = List.fold_right
       (fun s b ->
         let r = Int32.add s.tx_sent_cpt b in 
-        let rate = ((Int32.to_float s.tx_sent_cpt) *. 8.0) /. 60000.0 in 
+        let rate = ((Int32.to_float s.tx_sent_cpt) *. 8.0) /. 1024.0 in 
         let _ = if (st.verbose) then printf "-%.4fkbps " rate in 
           r) st.finished 0l in
     let finished_count = List.length st.finished in 
     let _ = st.finished <- [] in 
-    let rate = ((Int32.to_float (Int32.add total_bytes finished_bytes)) *. 8.0) /. 60000000.0 in 
-    let _ = printf "\n%d streams active, %d made progress, %d finished: tot = %ld, tot Mb/s = %.2f\n%!"
+    let rate = ((Int32.to_float (Int32.add total_bytes finished_bytes)) *. 8.0) /. 1048576.0 in 
+    let _ = 
+      if (st.verbose) then 
+        printf "\n%d streams active, %d made progress, %d finished: tot = %ld, tot Mb/s = %.2f\n%!"
               active_count progress_count finished_count (Int32.add total_bytes finished_bytes) rate in
       return ()
   done 
@@ -300,7 +308,6 @@ let write_and_flush t buf =
 (*
  * Listening methods
  * *)
-
 let create_listeners mgr st num_ports base_port cb = 
     let rec port_num_list = function 
       | num when (num = base_port) -> [num]
@@ -336,11 +343,14 @@ let simple_server st src_port (dst_ip, dst_port) t =
             let buf = Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0 (Int32.to_int len) in 
             lwt _ = write_and_flush t buf in 
             let _ = update_tx_stat state len in
-              return 
-                (eprintf 
+            let _ = 
+              if (st.verbose) then 
+                eprintf 
                    "%03.6f: flow %d - finished %ld bytes (%ld pkts)\n%!"
                    (OS.Clock.time ()) state.client_id state.tx_target 
-                   state.tx_pkts)
+                   state.tx_pkts
+            in
+              return ()
       in 
       lwt _ = send_data state t tx_len in
         return (del_pttcp_state st state)
@@ -421,6 +431,84 @@ let surge_client st interpage objperpage interobj objsize state dhost dst_port t
     return (eprintf "%03.6f: surge_client error: %s\n %s\n%!" (OS.Clock.time ()) 
       (Printexc.to_string exn) (Printexc.get_backtrace ()) ) 
 
+(*
+ * trace driven packet generation
+ *
+ * *)
+let create_trace_listener mgr port =
+  let trace_server_handler src_port (dst_ip, dst_port) t = 
+    lwt buf = Channel.read_some ~len:4 t in
+    let tx_len = Cstruct.LE.get_uint32 buf 0 in  
+    let rec send_data state t = function 
+      | 0l -> return ()
+      | len when (len > 1460l) -> 
+          let buf = (Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0 1460) in 
+          lwt _ = write_and_flush t buf in
+            send_data state t (Int32.sub len 1460l)
+      | len ->
+          let buf = Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0 (Int32.to_int len) in 
+          lwt _ = write_and_flush t buf in 
+            return ()
+      in 
+      lwt _ = send_data state t tx_len in
+      lwt _ = Net.Channel.close t in 
+       return ()
+  in
+  try_lwt
+    let _ = printf "Openning port %d\n%!" port in
+      Net.Channel.listen mgr (`TCPv4 ((None, port), (trace_server_handler port) )) 
+  with exn ->
+    return (eprintf "%03.f: create_listeners error : %s\n%!" 
+            (OS.Clock.time ()) (Printexc.to_string exn))
+      
+let create_trace_connector mgr dhosts port filename outfile =
+  let request_flow size req_id out t = 
+    let start_ts = OS.Clock.time () in 
+    let buf =  Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0 4 in 
+    let _ = Cstruct.LE.set_uint32 buf 0 size in 
+    lwt _  = write_and_flush t buf in
+    let count = ref 0l in 
+    lwt _ = 
+      while_lwt (size > !count) do
+        lwt recv = Channel.read_some t in 
+        let _ = count := Int32.add !count (Int32.of_int (Cstruct.len recv)) in
+        return ()
+      done
+    in
+    lwt _ = Net.Channel.close t in 
+    let _ = output_string out (sprintf "%.06f %.06f %ld %d\n" start_ts
+    (OS.Clock.time ()) size req_id) in
+    let _ = flush out in 
+      return ()
+(*      Net.Channel.close t*)
+  in 
+  
+  let req_id = ref 0 in 
+  let out = open_out outfile in 
+  let fd = open_in filename in 
+  try_lwt 
+  lwt _ = 
+    while_lwt true do
+      let line = input_line fd in
+      let sample = Re_str.split (Re_str.regexp "\ ") line in 
+      let dhost = List.nth dhosts (int_of_string (List.nth sample 2)) in 
+      let size = Int32.shift_left 1024l (int_of_string (List.nth sample 1)) in
+      let delay = float_of_string (List.nth sample 0) in 
+      lwt _ = OS.Time.sleep (delay /. 1000000.0) in
+      let _ = incr req_id in 
+      let _ = 
+        ignore_result (
+          Net.Channel.connect mgr (`TCPv4 (None, (dhost, port), 
+        (request_flow size !req_id out) )))
+      in
+        return ()
+    done
+  in
+    return (close_out out )
+  with End_of_file -> return ()
+
+ 
+
 let generate_traffic mgr mode verbose = 
   let st = init_pttcp_state_t mode verbose in 
     match mode with 
@@ -440,4 +528,9 @@ let generate_traffic mgr mode verbose =
         interpage, objperpage, interobj, objsize) ->
           create_connectors mgr st dhost num_ports base_port num_conn 
             true (surge_client st interpage objperpage interobj objsize)
+      | Trace_server (port) ->  create_trace_listener mgr port 
+      | Trace_client (dhosts, port, trace_name, dest_name) -> 
+        create_trace_connector mgr dhosts port trace_name dest_name 
       | _ -> return (eprintf "Not Implemented mechanism\n%!")
+
+ 
