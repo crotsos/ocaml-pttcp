@@ -138,8 +138,8 @@ open Printf
  * *)
 
 type state_t = {                                         
-    sinme: ipv4_dst;
-    sinhim: ipv4_dst;
+    sinme: (Ipaddr.V4.t * int);
+    sinhim: (Ipaddr.V4.t * int);
     mutable tx_target: int32;        (* used by tx side *)
     mutable tx_pkts: int32;
     mutable tx_sent: int32;
