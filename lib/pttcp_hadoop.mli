@@ -16,5 +16,5 @@
 
 type pttcp_t 
 
-val create_server : Net.Manager.t -> Net.Nettypes.ipv4_addr -> int-> pttcp_t
+val create_server : Net.Manager.t -> Ipaddr.V4.t -> int -> pttcp_t
 val create_flow : Net.Manager.t -> pttcp_t -> int -> string -> unit 

@@ -18,33 +18,19 @@ open Net
 open Net.Nettypes
 open Lwt 
 open Printf 
-open Tiny_json
-open Util
-open Json
+open Rpc
+
+let pr = Printf.printf
 
 type pttcp_t = {
   (* req_id, step_id -> ((src_ip, size), (dst_ip * int) ) *)
-  requests : (int * int, Json.t * ((ipv4_addr  * float * int) list) * ((ipv4_addr * int) list) ) Hashtbl.t;
-  push : ((ipv4_addr * int) list * Json.t) option -> unit;
+  requests : (int * int, Rpc.t * ((Ipaddr.V4.t * float * int) list) * ((Ipaddr.V4.t * int) list) ) Hashtbl.t;
+  push : ((Ipaddr.V4.t * int) list * Rpc.t) option -> unit;
 }
 
-let json_to_string =
-  let rec show_aux depth = function
-    | String s -> "\"" ^s^ "\""
-    | Number x -> !%"%f" x
-    | Object fs ->
-        "{"^ slist (",") (fun (k,v) -> "\""^k^"\":"^ (show_aux (depth+1)) v) fs^"}"
-    | Array xs -> "[" ^slist "," (show_aux depth) xs ^ "]"
-    | Bool true -> "TRUE"
-    | Bool false -> "FALSE"
-    | Null -> "NULL"
-  in
-  show_aux 1
-
-
 let send_data json size t = 
-  let data = json_to_string json in 
-  let buf = Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0 ((String.length data) + 4) in
+  let data = Jsonrpc.to_string json in 
+  let buf = Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get 1)) 0 ((String.length data) + 4) in
   let _i = Cstruct.LE.set_uint32 buf 0 (Int32.of_int (String.length data)) in 
   let _ = Cstruct.blit_from_string data 0 buf 4 (String.length data) in  
 
@@ -53,12 +39,12 @@ let send_data json size t =
   let rec send_data state t = function 
     | 0 -> return ()
     | len when (len > 1460) -> 
-        let buf = (Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0 1460) in 
+        let buf = (Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get 1)) 0 1460) in 
         let _ = Channel.write_buffer t buf in 
         lwt _ = Channel.flush t in 
           send_data state t (len - 1460)
     | len ->
-        let buf = Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get ())) 0 len in
+        let buf = Cstruct.sub (OS.Io_page.to_cstruct (OS.Io_page.get 1)) 0 len in
         let _ = Channel.write_buffer t buf in 
           Channel.flush t 
   in 
@@ -68,8 +54,7 @@ let send_data json size t =
 
 let request_manage mgr json port (dest_ip, size) =  
   (* TODO add code client generating traffic here *)
-  let _ = printf "XXXXX will request from dest_ip %s to send %d data \n%!"
-  (Nettypes.ipv4_addr_to_string dest_ip) size in 
+  let _ = pr "request from %s %d bytes\n%!" (Ipaddr.V4.to_string dest_ip) size in 
   lwt _ = Net.Channel.connect mgr (`TCPv4 (None, (dest_ip, port), 
                                                send_data json size) ) in 
   let _ = printf "XXXXXXX returning from connection\n%!" in 
@@ -82,9 +67,12 @@ let request_manager mgr stream port =
     | Some ( requests, json) -> Lwt_list.iter_p  (request_manage mgr json port) requests
     | None -> return ()
   done 
-(*{ req_id:1,step_id:2, init_ts:0.01, path: [
-  [ [{src_ip:127.0.0.2, st_ip:127.0.0.1, delay:0.1,
-  len:100}],[{src_ip:127.0.0.2, dst_ip:127.0.0.1, delay:0.1, len:100}], ], 
+(*{ req_id:1,step_id:2, init_ts:0.01, path: 
+  * [
+      [ 
+        {src_ip:127.0.0.2, st_ip:127.0.0.1, delay:0.1, len:100},
+        {src_ip:127.0.0.2, dst_ip:127.0.0.1, delay:0.1, len:100}, 
+      ], 
 
   [ [{src_ip:127.0.0.2, st_ip:127.0.0.1, delay:0.1,
   len:100}],[{src_ip:127.0.0.2, dst_ip:127.0.0.1, delay:0.1, len:100}], ], 
@@ -93,15 +81,26 @@ let request_manager mgr stream port =
   len:100}],[{src_ip:127.0.0.2, dst_ip:127.0.0.1, delay:0.1, len:100}], ],  ]
  * *)
 
-let rec get_object_field field = function
-  | [] -> raise Not_found
-  | (name, t)::_ when field = name -> t
-  | _::rest -> get_object_field field rest
-let rec get_object_field_as_ipv4 field lst = 
-  Net.Nettypes.ipv4_addr_of_string (Json.as_string (get_object_field field lst))
-let rec get_object_field_as_float field lst = Json.as_float (get_object_field field lst)
-let rec get_object_field_as_int field lst = 
-  int_of_float (Json.as_float (get_object_field field lst))
+let rec get_field field = function
+  | Dict t -> begin
+      let rec get_field_inner = function
+        | [] -> raise Not_found
+        | (name, t)::_ when field = name -> t
+        | _::rest -> get_field_inner rest
+      in
+      get_field_inner t
+  end
+  | _ -> raise Not_found
+let rec get_list field t =
+  match (get_field field t) with 
+  | Enum t -> t
+  | _ -> raise Not_found
+
+
+let rec ipv4_of_field field lst = Ipaddr.V4.of_int32 (int32_of_rpc (get_field field lst))
+let rec float_of_field field lst = float_of_rpc (get_field field lst)
+let rec int_of_field field lst = int_of_rpc (get_field field lst)
+let rec string_of_field field lst = string_of_rpc (get_field field lst)
 
 
 let request_handler st src_ip (dst_ip, dst_port) t = 
@@ -113,55 +112,68 @@ let request_handler st src_ip (dst_ip, dst_port) t =
   let _ = printf "got a request as a server containing\n%s\n%!" json_str in 
   let json = 
     try
-      Json.as_object (Json.parse json_str) 
+      Jsonrpc.of_string json_str
     with exn -> 
       let _ = eprintf "failed with error %s\n%!" (Printexc.to_string exn) in 
         failwith "error"
   in
 
   (* export some details *)
-  let req_id = get_object_field_as_int "req_id" json in  
-  let step_id = get_object_field_as_int "step_id" json in 
+  let req_id = int_of_field "req_id" json in  
+  let step_id = int_of_field "step_id" json in 
 
 
   (* translate request to input and output streams *)
   let (delay, size) = 
     if ( not (Hashtbl.mem st.requests (req_id, step_id))) then
       (* Haven't seen this request before, add state in hashtbl *)
-      let path = List.nth (Json.as_list (get_object_field "path" json)) step_id in
+      let path = List.nth (get_list "path" json) step_id in
 
-      let srcs = List.fold_right (
-        fun hop ret -> 
-          let hop_obj = Json.as_object hop in 
-          match (get_object_field_as_ipv4 "dst_ip" hop_obj, 
-               get_object_field_as_ipv4 "src_ip" hop_obj) with
-          | Some dst, Some src when dst = src_ip ->
-              let _ = printf "waiting for dest %s\n%!" (Nettypes.ipv4_addr_to_string src) in 
-              (src, (get_object_field_as_float "delay" hop_obj),
-               (get_object_field_as_int "len" hop_obj))::ret 
-          | _ -> ret
-      ) (Json.as_list path) [] in 
+      let srcs = 
+        match (path) with
+        | Enum t -> 
+            begin
+              List.fold_right (
+                fun hop ret -> 
+                  match hop with
+                  | Dict l ->
+                    if (ipv4_of_field "dst_ip" hop = src_ip) then 
+                      let _ = pr "waiting %s\n%!" (string_of_field "dst_ip" hop) in
+                      ((ipv4_of_field "src_ip" hop), 
+                      (float_of_field "delay" hop), (int_of_field "len" hop))::ret 
+                    else ret
+                  | _ -> ret
+              ) t []
+            end
+        | _ -> failwith "malformed path"
+      in
 
       let dsts = 
         try 
-          let path = List.nth (Json.as_list (get_object_field "path" json)) (step_id + 1) in
-          List.fold_right (
-            fun hop ret -> 
-              let hop_obj = Json.as_object hop in 
-              match (get_object_field_as_ipv4 "dst_ip" hop_obj, 
-                     get_object_field_as_ipv4 "src_ip" hop_obj) with
-              | Some dst, Some src when src = src_ip -> 
-                  (dst,(get_object_field_as_int "len" hop_obj))::ret 
-              | _ -> ret
-                  ) (Json.as_list path) []  
+          let path = List.nth (get_list "path" json) (step_id + 1) in
+          match (path) with
+          | Enum t -> 
+              begin
+                List.fold_right (
+                  fun hop ret -> 
+                    match hop with 
+                    | Dict _ -> 
+                      if ( ipv4_of_field "src_ip" hop = src_ip) then
+                        ((ipv4_of_field "dst_ip" hop),(int_of_field "len" hop))::ret
+                      else ret
+                    | _ -> ret
+                ) t []  
+              end
+          | _ -> failwith "malformed path" 
         with Failure "nth" -> []
       in
+
       let (_, delay, size) = List.find (fun (ip, _, _) -> ip = dst_ip) srcs in 
-      let json = Json.Object 
-        [("req_id", Json.Number (float_of_int req_id) );
-         ("step_id", Json.Number(float_of_int (step_id + 1)));
-         ("init_ts", get_object_field "init_ts" json);
-         ("path", get_object_field "path" json)] in 
+      let json = Dict  
+        [("req_id", (rpc_of_int req_id) );
+         ("step_id", (rpc_of_int (step_id + 1)) );
+         ("init_ts", get_field "init_ts" json);
+         ("path", get_field "path" json)] in 
       let _ = Hashtbl.replace st.requests (req_id, step_id) (json, srcs, dsts) in 
         (delay, size )
   else 
@@ -206,21 +218,19 @@ let create_server mgr ip port =
 
 
 let create_flow mgr st port desc = 
-  let json = Json.as_object (Json.parse desc) in 
-
+  let json = Jsonrpc.of_string desc in 
   (* export some details *)
-  let req_id = int_of_float (Json.as_float (get_object_field "req_id" json) ) in  
-  let step_id = int_of_float (Json.as_float (get_object_field "step_id" json) ) in  
-
-  let path = List.nth (Json.as_list (get_object_field "path" json)) step_id in
-  let dsts = 
-    List.fold_right (
-      fun hop ret -> 
-        let hop_obj = Json.as_object hop in 
-        match (get_object_field_as_ipv4 "dst_ip" hop_obj, get_object_field_as_ipv4 "src_ip" hop_obj) with
-          | Some dst, _ -> (dst,(get_object_field_as_int "len" hop_obj))::ret 
-          | _ -> ret
-    ) (Json.as_list path) []  
+  let step_id = int_of_field "step_id" json in  
+  let path = List.nth (get_list "path" json) step_id in
+  let dsts =
+    match path with 
+    | Enum t -> begin
+        List.fold_right (
+          fun hop ret -> 
+            match hop with
+            | Dict _ -> (ipv4_of_field "dst_ip" hop, (int_of_field "len" hop))::ret 
+            | _ -> ret) t [] 
+    end
+    | _ -> failwith "Malformed request"
   in
-  let _ = st.push (Some (dsts, (Json.Object json) )) in
-    ()
+  st.push (Some (dsts, json) )

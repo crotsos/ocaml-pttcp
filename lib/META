@@ -1,8 +1,8 @@
 # OASIS_START
-# DO NOT EDIT (digest: 8bbf4289d76866af7f7ab1640226d8cf)
+# DO NOT EDIT (digest: 1f74c60bc912f901e3ae1db25d14e56c)
 version = "0.1"
 description = "An ocaml port of the cambridge pttcp traffic generator"
-requires = "mirage-net lwt lwt.syntax tiny_json re.str"
+requires = "mirage-net lwt lwt.syntax re.str ipaddr rpclib rpclib.json"
 archive(byte) = "pttcp.cma"
 archive(byte, plugin) = "pttcp.cma"
 archive(native) = "pttcp.cmxa"

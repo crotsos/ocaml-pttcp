@@ -12,4 +12,4 @@ Library pttcp
   Modules:        Pttcp_tcp, Pttcp_udp, Pttcp_hadoop
   CompiledObject: native
   Pack:           true
-  BuildDepends:	  mirage-net, lwt, lwt.syntax, tiny_json, re.str
+  BuildDepends:	  mirage-net, lwt, lwt.syntax, re.str, ipaddr, rpclib, rpclib.json 
