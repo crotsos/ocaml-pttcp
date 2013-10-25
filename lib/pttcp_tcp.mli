@@ -31,7 +31,17 @@ type traffic_model =
   | Cts_ctl of int * int32 * Ipaddr.V4.t * int * int
   | Surge_client of int * Ipaddr.V4.t * int * int * model * model * model *model 
   | Trace_server of int
-  | Trace_client of Ipaddr.V4.t list * int * string * string
+  | Trace_client of Ipaddr.V4.t list * int * int * model * model 
 
+type stats = {
+  beg_ts: float;
+  end_ts: float;
+  size: int32;
+  req_id: int; 
+}
 
-val generate_traffic: Net.Manager.t -> traffic_model -> bool -> unit Lwt.t
+type pttcp_t 
+
+val init_pttcp_state_t: traffic_model -> bool -> pttcp_t
+val generate_traffic: Net.Manager.t -> pttcp_t -> unit Lwt.t
+val stats: pttcp_t -> stats list

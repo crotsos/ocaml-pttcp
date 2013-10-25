@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: 7975cecf6c61b7c761bfbaf2351067e3) *)
+(* DO NOT EDIT (digest: 2bebdad40f0b462a80edbe558f9441f2) *)
 module OASISGettext = struct
 (* # 21 "src/oasis/OASISGettext.ml" *)
 
@@ -510,7 +510,7 @@ let package_default =
      MyOCamlbuildBase.lib_ocaml = [("pttcp", ["lib"])];
      lib_c = [];
      flags = [];
-     includes = [];
+     includes = [("tests", ["lib"])];
      }
   ;;
 

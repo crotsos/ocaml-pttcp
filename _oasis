@@ -5,6 +5,7 @@ Synopsis:    An ocaml port of the cambridge pttcp traffic generator
 Authors:     Charalampos Rotsos
 License:     GPL-2
 Plugins:     META (0.3)
+BuildTools:  ocamlbuild
 
 Library pttcp
   Path:           lib/
@@ -12,4 +13,20 @@ Library pttcp
   Modules:        Pttcp_tcp, Pttcp_udp, Pttcp_hadoop
   CompiledObject: native
   Pack:           true
-  BuildDepends:	  mirage-net, lwt, lwt.syntax, re.str, ipaddr, rpclib, rpclib.json 
+  BuildDepends:	  mirage-net, lwt, lwt.syntax, re.str, ipaddr, rpclib, rpclib.json
+
+Executable client
+  Path:           tests/
+  MainIs:         client.ml
+  Custom:         true
+  CompiledObject: native
+  Install:        false
+  BuildDepends:   pttcp
+
+Executable server
+  Path:           tests/
+  MainIs:         server.ml
+  Custom:         true
+  CompiledObject: native
+  Install:        false
+  BuildDepends:   pttcp

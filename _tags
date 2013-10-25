@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 02848085c0ba07f5b2fb5dc6d08034bf)
+# DO NOT EDIT (digest: f738f9cbd5fff47b52a0687269f39703)
 # Ignore VCS directories, you can use the same kind of rule outside 
 # OASIS_START/STOP if you want to exclude directories that contains 
 # useless stuff for the build process
@@ -25,6 +25,34 @@
 <lib/*.ml{,i}>: pkg_ipaddr
 <lib/*.ml{,i}>: pkg_rpclib
 <lib/*.ml{,i}>: pkg_rpclib.json
+# Executable client
+"tests/client.native": use_pttcp
+"tests/client.native": pkg_mirage-net
+"tests/client.native": pkg_lwt
+"tests/client.native": pkg_lwt.syntax
+"tests/client.native": pkg_re.str
+"tests/client.native": pkg_ipaddr
+"tests/client.native": pkg_rpclib
+"tests/client.native": pkg_rpclib.json
+"tests/client.native": custom
+# Executable server
+"tests/server.native": use_pttcp
+"tests/server.native": pkg_mirage-net
+"tests/server.native": pkg_lwt
+"tests/server.native": pkg_lwt.syntax
+"tests/server.native": pkg_re.str
+"tests/server.native": pkg_ipaddr
+"tests/server.native": pkg_rpclib
+"tests/server.native": pkg_rpclib.json
+<tests/*.ml{,i}>: use_pttcp
+<tests/*.ml{,i}>: pkg_mirage-net
+<tests/*.ml{,i}>: pkg_lwt
+<tests/*.ml{,i}>: pkg_lwt.syntax
+<tests/*.ml{,i}>: pkg_re.str
+<tests/*.ml{,i}>: pkg_ipaddr
+<tests/*.ml{,i}>: pkg_rpclib
+<tests/*.ml{,i}>: pkg_rpclib.json
+"tests/server.native": custom
 # OASIS_STOP
 true: annot
 <lib/*>: syntax_camlp4o

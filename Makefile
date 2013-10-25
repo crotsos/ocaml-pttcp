@@ -7,17 +7,8 @@ NAME=pttcp
 
 -include Makefile.config
 
-unix:
-	cd lib && $(MAKE)
-
-xen:
-	cd lib && $(MAKE) xen
-
-clean: # setup.data setup.bin
+clean: 
 	./setup.bin -clean $(OFLAGS)
-
-run:
-	sudo ./lib/_build/main.native
 
 distclean: setup.data setup.bin
 	./setup.bin -distclean $(OFLAGS)
